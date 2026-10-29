@@ -42,4 +42,3 @@ export function progressIndex(queue, progress = {}) {
   const index = queue.findIndex(p => p.ci === progress.ci && p.pi === progress.pi && p.si === progress.si);
   return index < 0 ? 0 : index;
 }
-export function escapeXML(text) { return text.replace(/[<>&"']/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&apos;'}[c])); }

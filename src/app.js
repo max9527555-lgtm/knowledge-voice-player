@@ -1,23 +1,20 @@
 import * as db from './db.js';
 import { parseFile } from './parsers.js';
 import { flatten } from './structure.js';
-import { AzureTTS } from './tts.js';
 import { Player } from './player.js';
 import { zipSync, unzipSync, strToU8, strFromU8 } from '../vendor/fflate.mjs';
 const $ = id => document.getElementById(id);
-let settings = { id: 'preferences', provider: 'system', voice: 'zh-CN-XiaoxiaoNeural', style: 'general', region: 'eastasia', systemVoice: '', rate: 1 };
-const azure = new AzureTTS(); const player = new Player(azure, settings);
-let books = [], renderedChapter = '', toastTimer, importing = false, caching = false, cacheAbort, waitingWorker;
+let settings = { id: 'preferences', provider: 'system', systemVoice: '', rate: 1 };
+const player = new Player(settings);
+let books = [], renderedChapter = '', toastTimer, importing = false, waitingWorker;
 const urls = [];
 const element = (tag, className, text) => { const n = document.createElement(tag); if (className) n.className = className; if (text !== undefined) n.textContent = text; return n; };
 function message(text, timeout = 6500) { $('toast').textContent = text; $('toast').hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { $('toast').hidden = true; }, timeout); }
 function errorMessage(error) { return error?.name === 'QuotaExceededError' ? '存储空间不足，操作未保存。请先备份，再释放设备空间。' : error?.message || String(error); }
 function catchError(error) { message(errorMessage(error), 10000); }
 function action(id, callback) { $(id).addEventListener('click', () => { try { Promise.resolve(callback()).catch(catchError); } catch (error) { catchError(error); } }); }
-function closeDialog(dialog) { if (dialog.id === 'cacheDialog') cacheAbort?.abort(); dialog.close(); }
+function closeDialog(dialog) { dialog.close(); }
 document.querySelectorAll('[data-close]').forEach(button => button.onclick = () => closeDialog(button.closest('dialog')));
-$('cacheDialog').addEventListener('cancel', () => cacheAbort?.abort());
-const fmtTime = n => { n = Math.max(0, Math.floor(n || 0)); return `${Math.floor(n / 60)}:${String(n % 60).padStart(2, '0')}`; };
 const fmtBytes = n => n > 1024 ** 3 ? `${(n / 1024 ** 3).toFixed(1)} GB` : `${(n / 1024 ** 2).toFixed(1)} MB`;
 async function renderLibrary() {
   const query = $('search').value.trim().toLocaleLowerCase();
@@ -37,10 +34,9 @@ async function renderLibrary() {
     open.onclick = () => openBook(book).catch(catchError);
     const del = element('button', 'delete-book', '×'); del.setAttribute('aria-label', '删除 ' + book.title); del.title = '删除文档及缓存';
     del.onclick = async () => {
-      if (caching) { message('请先中止语音缓存'); return; }
       if (!confirm(`删除《${book.title}》及其进度、语音缓存？此操作无法撤销，请先备份。`)) return;
       try {
-        if (player.book?.id === book.id) { player.pause(); await player.save(); player.release(); player.book = null; player.queue = null; renderedChapter = ''; }
+        if (player.book?.id === book.id) { player.pause(); await player.save(); player.book = null; player.queue = null; renderedChapter = ''; }
         await db.removeBook(book.id); localStorage.removeItem('kvp-progress-' + book.id);
         books = books.filter(b => b.id !== book.id); await renderLibrary(); renderPlayer();
         if (!player.book) { $('reader').hidden = true; $('welcome').hidden = false; }
@@ -53,7 +49,7 @@ async function renderLibrary() {
 async function openBook(book) {
   if (player.book?.id !== book.id) {
     await player.save(); const saved = await db.readProgress(book.id);
-    if (saved?.provider && (saved.provider !== settings.provider || (saved.provider === 'azure' && (saved.voice !== settings.voice || saved.style !== settings.style)))) { saved.time = saved.char = 0; }
+    if (saved?.provider && saved.provider !== 'system') { saved.time = saved.char = 0; }
     player.load(book, saved); await player.save(); renderedChapter = ''; await db.put('settings', { id: 'lastBook', bookId: book.id });
   }
   $('welcome').hidden = true; $('reader').hidden = false; $('readerTitle').textContent = book.title; $('readerFormat').textContent = `${book.format} / 本地知识库`;
@@ -90,17 +86,15 @@ function renderPlayer() {
   for (const id of ['play', 'previous', 'next', 'seek']) $(id).disabled = !enabled;
   $('play').textContent = player.state === 'loading' ? '⋯' : player.state === 'playing' ? 'Ⅱ' : '▶';
   $('play').setAttribute('aria-label', player.state === 'playing' || player.state === 'loading' ? '暂停' : '播放');
-  $('voiceButton').textContent = settings.provider === 'azure' ? 'AI · ' + (settings.voice.includes('Xiaoyi') ? '晓伊' : '晓晓') : '系统语音';
+  $('voiceButton').textContent = '系统语音';
   if (!enabled) { $('nowTitle').textContent = '还没有正在听读的文档'; $('nowChapter').textContent = '从书库选择一本，继续你的学习'; return; }
   $('nowTitle').textContent = player.book.title;
   $('nowChapter').textContent = `${player.completed ? '已听完 · ' : ''}${player.book.chapters[player.current.ci].title} · 第 ${player.current.pi + 1} 段`;
-  const audio = settings.provider === 'azure'; const duration = audio && Number.isFinite(player.audio.duration) ? player.audio.duration : 0;
-  $('seek').max = audio ? duration || 1 : player.current.text.length;
-  $('seek').step = audio ? .1 : 1; $('seek').value = audio ? player.time : player.char;
-  $('seek').disabled = !enabled || (audio && !duration);
-  $('seek').setAttribute('aria-label', audio ? '当前语音块的秒数' : '当前短句的字符位置（系统朗读近似定位）');
-  $('positionLabel').textContent = audio ? fmtTime(player.time) : `${player.char}字`;
-  $('durationLabel').textContent = audio ? fmtTime(duration) : `${player.current.text.length}字`;
+  $('seek').max = player.current.text.length;
+  $('seek').step = 1; $('seek').value = player.char;
+  $('seek').setAttribute('aria-label', '当前短句字符位置（系统朗读近似定位）');
+  $('positionLabel').textContent = player.char + '字';
+  $('durationLabel').textContent = player.current.text.length + '字';
   renderText();
   const card = [...document.querySelectorAll('.book-card')].find(c => c.dataset.bookId === player.book.id);
   if (card) {
@@ -142,53 +136,28 @@ function updateVoices() {
   const voices = window.speechSynthesis?.getVoices() || [];
   $('systemVoice').replaceChildren();
   const defaultOption = element('option', '', '自动选择普通话音色'); defaultOption.value = ''; $('systemVoice').append(defaultOption);
-  voices.filter(v => /^zh/i.test(v.lang)).forEach(voice => { const o = element('option', '', voice.name + (voice.localService ? ' · 本地' : ' · 需联网')); o.value = voice.voiceURI; $('systemVoice').append(o); });
+  voices.filter(v => /^zh/i.test(v.lang)).forEach(voice => { const o = element('option', '', voice.name + (voice.localService ? ' · 本地' : ' · 可能需联网')); o.value = voice.voiceURI; $('systemVoice').append(o); });
   $('systemVoice').value = settings.systemVoice;
 }
 window.speechSynthesis?.addEventListener('voiceschanged', updateVoices);
-function providerUI() { $('systemSettings').hidden = $('provider').value !== 'system'; $('azureSettings').hidden = $('provider').value !== 'azure'; $('style').disabled = $('voice').value !== 'zh-CN-XiaoxiaoNeural'; }
-$('provider').onchange = providerUI; $('voice').onchange = providerUI;
 async function storageInfo() {
   const estimate = await navigator.storage?.estimate?.(); const persistent = await navigator.storage?.persisted?.();
   $('storageInfo').textContent = estimate ? `${fmtBytes(estimate.usage)} / ${fmtBytes(estimate.quota)}` : '浏览器未提供容量信息';
   $('persistInfo').textContent = persistent ? '已获持久存储。主动清理网站数据仍会删除书库。' : '尚未获得持久存储；浏览器可能在空间不足时清理数据。';
 }
 async function showSettings() {
-  for (const name of ['provider', 'voice', 'style', 'region']) $(name).value = settings[name];
-  $('apiKey').value = azure.key; updateVoices(); providerUI(); $('settingsDialog').showModal(); await storageInfo();
+  updateVoices(); $('settingsDialog').showModal(); await storageInfo();
 }
 action('settingsButton', showSettings); action('voiceButton', showSettings);
 $('settingsForm').onsubmit = async event => {
-  event.preventDefault(); if (caching) { message('请先中止本章缓存，再更改声音'); return; }
+  event.preventDefault();
   try {
-    const next = { ...settings, provider: $('provider').value, voice: $('voice').value, style: $('voice').value.includes('Xiaoyi') ? 'general' : $('style').value, region: $('region').value.trim(), systemVoice: $('systemVoice').value };
-    await db.put('settings', next); azure.key = $('apiKey').value.trim(); settings = next; player.updateSettings(settings);
-    $('settingsDialog').close(); message('声音设置已保存；密钥仅在本次会话使用');
-  } catch (error) { catchError(error); }
+    const next = { id:'preferences', provider:'system', systemVoice:$('systemVoice').value, rate:settings.rate };
+    await db.put('settings',next); settings=next; player.updateSettings(settings);
+    $('settingsDialog').close(); message('系统音色已保存');
+  } catch(error) { catchError(error); }
 };
 action('persist', async () => { const granted = await navigator.storage?.persist?.(); await storageInfo(); message(granted ? '已获得持久存储权限' : '浏览器未授予持久存储，请添加到主屏幕并保留备份'); });
-action('cacheChapter', async () => {
-  if (!player.book || caching) return;
-  if (settings.provider !== 'azure') { message('请先在声音设置中选择 Azure AI；系统 TTS 无法生成音频缓存'); await showSettings(); return; }
-  const book = player.book; const selectedSettings = { ...settings }; const chapter = player.current.ci;
-  const queue = player.queue.filter(q => q.ci === chapter); let missing = 0, characters = 0;
-  for (const q of queue) if (!await azure.cached(book.id, q.text, selectedSettings)) { missing++; characters += q.text.length; }
-  if (!missing) { message('本章当前音色已全部缓存，可离线播放'); return; }
-  if (!azure.key) { message('请先填写本次会话的 Azure 密钥'); await showSettings(); return; }
-  if (!confirm(`缓存《${book.chapters[chapter].title}》？\n尚需生成 ${missing} 个短句，正文约 ${characters} 字符。\n将发送至 Azure 并按服务商规则计费，费率请以账户为准。`)) return;
-  player.pause(); caching = true; $('cancelCache').textContent = '中止生成'; cacheAbort = new AbortController(); $('cacheDialog').showModal(); $('cacheProgress').max = queue.length; $('cacheProgress').value = 0;
-  let completed = 0;
-  try {
-    for (const q of queue) {
-      if (cacheAbort.signal.aborted) break;
-      $('cacheMessage').textContent = `${book.chapters[chapter].title}\n已保存 ${completed} / ${queue.length} 个短句`;
-      await azure.audio(book.id, q.text, selectedSettings, cacheAbort.signal); completed++; $('cacheProgress').value = completed;
-    }
-    $('cacheMessage').textContent = `已保存 ${completed} / ${queue.length} 个短句。${cacheAbort.signal.aborted ? '已中止。' : '本章可离线播放。'}`;
-  } catch (error) { if (error.name !== 'AbortError') catchError(error); $('cacheMessage').textContent = `已保存 ${completed} / ${queue.length} 个短句；生成已停止。`; }
-  finally { caching = false; $('cancelCache').textContent = '关闭'; await storageInfo(); }
-});
-action('cancelCache', () => { if (caching) cacheAbort.abort(); else $('cacheDialog').close(); });
 function download(blob, name) {
   const url = URL.createObjectURL(blob); const a = element('a'); a.href = url; a.download = name; document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
@@ -227,9 +196,11 @@ $('backupInput').onchange = async event => {
 };
 function network() { $('network').textContent = navigator.onLine ? '本地优先' : '离线可用'; }
 window.addEventListener('online', network); window.addEventListener('offline', network);
-action('updateApp', async () => { if (caching || importing) { message('请先完成或中止导入和缓存'); return; } player.pause(); await player.save(); waitingWorker?.postMessage({ type: 'ACTIVATE' }); });
+action('updateApp', async () => { if (importing) { message('请先完成文档导入'); return; } player.pause(); await player.save(); waitingWorker?.postMessage({ type: 'ACTIVATE' }); });
 async function init() {
-  settings = { ...settings, ...await db.get('settings', 'preferences') }; player.settings = settings; $('rate').value = settings.rate;
+  const previous = await db.get('settings', 'preferences');
+  settings = { id:'preferences', provider:'system', systemVoice:previous?.systemVoice || '', rate:Number(previous?.rate) || 1 };
+  await db.put('settings',settings); player.settings = settings; $('rate').value = settings.rate;
   books = (await db.all('books')).sort((a,b) => b.importedAt - a.importedAt); await renderLibrary();
   const last = await db.get('settings', 'lastBook'); const book = books.find(b => b.id === last?.bookId); if (book) await openBook(book);
   network(); updateVoices();
