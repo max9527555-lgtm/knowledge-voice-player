@@ -1,0 +1,26 @@
+import { resolve, dirname } from 'node:path';
+import { cp, mkdir, readdir, readFile, writeFile, rm } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+const files = ['index.html','styles.css','manifest.webmanifest','icon.svg','icon-192.png','icon-512.png','THIRD_PARTY_NOTICES.md','src','vendor'];
+async function list(path) { const entries = await readdir(path, { withFileTypes:true }); const result=[]; for (const e of entries) { const name=path+'/'+e.name; if(e.isDirectory()) result.push(...await list(name)); else result.push(name); } return result; }
+const target = resolve('dist');
+if (dirname(target) !== process.cwd()) throw Error('Unexpected output path');
+await rm(target, { recursive:true, force:true });
+await mkdir(target, { recursive:true });
+for (const file of files) await cp(file, 'dist/'+file, { recursive:true });
+await writeFile('dist/.nojekyll', '');
+const paths = (await list('dist')).map(p=>p.slice(5)).filter(p=>p !== 'sw.js');
+const hash = createHash('sha256');
+for (const p of paths.sort()) hash.update(await readFile('dist/'+p));
+const version = hash.digest('hex').slice(0,12);
+const worker = `const ROOT=new URL('./',self.location.href);
+const PREFIX='kvp-shell-'+ROOT.pathname+'-';
+const CACHE=PREFIX+'${version}';
+const FILES=${JSON.stringify(['./',...paths.map(p=>'./'+p)])};
+self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(FILES))));
+self.addEventListener('activate',e=>e.waitUntil((async()=>{for(const key of await caches.keys())if(key.startsWith(PREFIX)&&key!==CACHE)await caches.delete(key);await self.clients.claim();})()));
+self.addEventListener('message',e=>{if(e.data?.type==='ACTIVATE')self.skipWaiting();});
+self.addEventListener('fetch',e=>{if(e.request.method!=='GET'||new URL(e.request.url).origin!==ROOT.origin||!new URL(e.request.url).pathname.startsWith(ROOT.pathname))return;e.respondWith((async()=>{const cached=await caches.match(e.request,{ignoreSearch:true});if(cached)return cached;try{return await fetch(e.request);}catch(error){if(e.request.mode==='navigate')return await caches.match(ROOT.href);throw error;}})());});
+`;
+await writeFile('sw.js',worker); await writeFile('dist/sw.js',worker);
+console.log('Built static PWA:', version, paths.length, 'files. IndexedDB unchanged.');

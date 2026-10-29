@@ -22,7 +22,7 @@
 
 进入仓库 Settings → Pages → Build and deployment → Source，选择 GitHub Actions。工作流会测试核心逻辑、构建 `dist/` 并发布。部署到 `https://用户名.github.io/仓库名/` 或自定义域名均使用相对资源路径。也可以直接将 `dist/` 内容部署到任意 HTTPS 静态服务器。
 
-当前未创建 GitHub 仓库、未实际发布。工作流参考 [GitHub Pages 官方文档](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages)。本地构建不需要 npm 安装：
+源码仓库：[knowledge-voice-player](https://github.com/max9527555-lgtm/knowledge-voice-player)。访问地址：[知听](https://max9527555-lgtm.github.io/knowledge-voice-player/)。仓库工作流负责自动构建并发布。工作流参考 [GitHub Pages 官方文档](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages)。本地构建不需要 npm 安装：
 
 ```powershell
 cd D:\Codex\knowledge-voice-player

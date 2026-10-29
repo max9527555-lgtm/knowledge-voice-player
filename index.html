@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#52685b"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="description" content="本地优先的知识语音播放器。文档留在设备，知识随时听读。">
+<title>知听 · 知识语音播放器</title>
+<link rel="manifest" href="./manifest.webmanifest"><link rel="icon" href="./icon.svg" type="image/svg+xml"><link rel="apple-touch-icon" href="./icon-192.png"><link rel="stylesheet" href="./styles.css">
+<script defer src="./vendor/mammoth.browser.min.js"></script><script type="module" src="./src/app.js"></script>
+</head>
+<body>
+<header class="topbar"><a class="brand" href="./"><span class="brand-mark" aria-hidden="true">知</span><strong>知听</strong><span class="brand-caption">让知识，慢慢入心。</span></a><div class="top-actions"><span id="network" class="status-pill">本地优先</span><button id="settingsButton" class="quiet">声音与存储</button></div></header>
+<main class="workspace">
+<aside class="library" aria-label="书库">
+<div class="section-label">YOUR KNOWLEDGE, WITH YOU</div><div class="library-heading"><h1>我的书库<span id="bookCount">0</span></h1><button id="importButton" class="primary small">＋ 导入</button></div>
+<label class="search"><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="搜索书名或正文" aria-label="搜索书名或正文"></label>
+<p class="library-caption">一份文档，一段随时可继续的学习。</p>
+<div id="bookList"></div><div class="library-bottom"><span class="local-dot"></span>文档与进度保存在这台设备<br><small>更新不清库 · 建议定期备份</small></div>
+</aside>
+<section class="reading" aria-label="阅读区">
+<div id="welcome" class="welcome"><span class="welcome-label">把阅读，交给耳朵</span><div class="book-illustration" aria-hidden="true"><div></div><span>知<br>识<br>有<br>声</span><i>〰</i></div><h2>让每一次听见，<br>成为自己的知识。</h2><p>导入你的文档，从一句、一段开始。<br>在这里，随时暂停，也随时接着听。</p><button id="welcomeImport" class="primary">导入第一份文档 <span aria-hidden="true">↗</span></button><div class="format-tags"><span>TXT</span><span>DOCX</span><span>EPUB</span><span>PDF</span></div><p class="welcome-foot">本地解析 · 离线阅读 · 自动续播</p></div>
+<div id="reader" hidden>
+<div class="reader-toolbar"><div><span id="readerFormat" class="section-label"></span><h2 id="readerTitle"></h2></div><button id="cacheChapter" class="outline small">↓ 缓存本章</button></div>
+<div class="chapter-bar"><label>章节 <select id="chapterSelect" aria-label="跳转章节"></select></label><span id="chapterInfo"></span></div>
+<p id="documentWarning" class="notice" hidden></p><div class="reading-meta"><span>点击句子定位听读</span><span id="cacheInfo">语音按短句生成</span></div>
+<article id="textContent" class="text-content"></article>
+</div>
+</section>
+</main>
+<footer id="playerBar" class="player-bar" aria-label="播放器"><div class="now-playing"><div class="mini-cover" aria-hidden="true">声</div><div><strong id="nowTitle">还没有正在听读的文档</strong><span id="nowChapter">从书库选择一本，继续你的学习</span></div></div><div class="transport"><div class="transport-buttons"><button id="previous" aria-label="上一段" title="上一段" disabled>⏮</button><button id="play" class="play-button" aria-label="播放" disabled>▶</button><button id="next" aria-label="下一段" title="下一段" disabled>⏭</button></div><div class="time-row"><span id="positionLabel">0:00</span><input id="seek" type="range" min="0" max="1" step="0.1" value="0" aria-label="当前语音块进度" disabled><span id="durationLabel">0:00</span></div></div><div class="playback-options"><label class="speed"><span class="sr-only">倍速</span><select id="rate"><option value="0.75">0.75×</option><option value="1" selected>1.0×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="1.75">1.75×</option><option value="2">2.0×</option></select></label><button id="voiceButton" class="quiet">系统语音</button></div></footer>
+<dialog id="settingsDialog"><form id="settingsForm"><div class="dialog-heading"><div><span class="section-label">YOUR LISTENING SPACE</span><h2>声音与存储</h2></div><button type="button" class="close" data-close aria-label="关闭">×</button></div><label>朗读引擎<select id="provider"><option value="system">系统 TTS · 免费备用</option><option value="azure">Azure AI · 中文自然女声</option></select></label><div id="systemSettings"><label>设备音色<select id="systemVoice"></select></label><p class="hint">离线能力取决于设备是否已下载该音色。部分设备从当前短句重读；系统语音无法导出为缓存音频。</p></div><div id="azureSettings" hidden><div class="two-columns"><label>音色<select id="voice"><option value="zh-CN-XiaoxiaoNeural">晓晓 · 普通话女声</option><option value="zh-CN-XiaoyiNeural">晓伊 · 普通话女声</option></select></label><label>风格<select id="style"><option value="general">自然</option><option value="gentle">温柔</option><option value="cheerful">轻快</option></select></label></div><label>Azure 区域<input id="region" placeholder="例如 eastasia" autocomplete="off" pattern="[a-z][a-z0-9]{1,35}"></label><label>资源密钥 · 仅本次会话<input id="apiKey" type="password" autocomplete="off" placeholder="填写自己的 Azure Speech 密钥"></label><p class="hint">播放未缓存短句时会向 Azure 发送该句正文并产生用量费用。文档解析完全本地；密钥不写入书库或备份。换音色或风格将生成新缓存。</p></div><button class="primary wide" type="submit">保存声音设置</button><hr><div class="storage-heading"><h3>本地数据</h3><span id="storageInfo">正在读取…</span></div><p id="persistInfo" class="hint"></p><div class="storage-buttons"><button type="button" id="persist" class="outline small">申请持久存储</button><button type="button" id="export" class="outline small">导出完整备份</button><button type="button" id="restore" class="outline small">恢复备份</button></div><p class="hint">备份包含书籍、原文、进度及已缓存音频。浏览器清理、卸载或更换网址会影响本地数据；请保存备份。iPhone 请先添加到主屏幕，再在应用内导入。</p><hr><p class="hint">安装：iPhone Safari → 分享 → 添加到主屏幕；Android / Windows 使用浏览器安装应用。首次加载完成后可离线打开。系统语音和锁屏连续播放需按设备实测。</p><div id="updateArea" hidden><button id="updateApp" type="button" class="outline">有新版本，保存进度后更新</button></div></form></dialog>
+<dialog id="importDialog"><div class="dialog-heading"><div><span class="section-label">A NEW CHAPTER STARTS HERE</span><h2>把文档放进书库</h2></div><button class="close" data-close aria-label="关闭">×</button></div><label class="drop-zone" id="dropZone"><span class="upload-symbol" aria-hidden="true">↥</span><strong>选择文件，或拖放到这里</strong><span>TXT · DOCX · EPUB · 文本型 PDF</span><small>单个文件不超过 60 MB，支持多选</small><input id="fileInput" type="file" accept=".txt,.docx,.epub,.pdf" multiple></label><p class="hint">文件在本机解析。扫描件需要 OCR，首版预留接口。PDF 多栏与表格请核对提取顺序。</p><p id="importStatus" role="status"></p></dialog>
+<dialog id="cacheDialog"><div class="dialog-heading"><h2>本章离线语音</h2><button class="close" data-close aria-label="关闭">×</button></div><p id="cacheMessage"></p><progress id="cacheProgress" value="0" max="1"></progress><p class="hint">每次只生成一个短句，成功后立即保存。已缓存短句不会重复收费。中止后保留已生成部分。</p><button id="cancelCache" class="outline">中止生成</button></dialog>
+<input id="backupInput" type="file" accept=".zip" hidden><div id="toast" class="toast" role="status" hidden></div>
+</body></html>
